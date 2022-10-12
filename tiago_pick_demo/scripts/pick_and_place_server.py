@@ -110,10 +110,10 @@ class PickAndPlaceServer(object):
 		self.clear_octomap_srv.wait_for_service()
 		rospy.loginfo("Connected!")
 
-                # Get the object size
-                self.object_height = rospy.get_param('~object_height')
-                self.object_width = rospy.get_param('~object_width')
-                self.object_depth = rospy.get_param('~object_depth')
+		# Get the object size
+		self.object_height = rospy.get_param('~object_height')
+		self.object_width = rospy.get_param('~object_width')
+		self.object_depth = rospy.get_param('~object_depth')
 
 		# Get the links of the end effector exclude from collisions
 		self.links_to_allow_contact = rospy.get_param('~links_to_allow_contact', None)
@@ -194,12 +194,12 @@ class PickAndPlaceServer(object):
 		rospy.loginfo("Second%s", object_pose.pose)
 		table_pose = copy.deepcopy(object_pose)
 
-                #define a virtual table below the object
-                table_height = object_pose.pose.position.z - self.object_width/2  
-                table_width  = 1.8
-                table_depth  = 0.5
-                table_pose.pose.position.z += -(2*self.object_width)/2 -table_height/2
-                table_height -= 0.008 #remove few milimeters to prevent contact between the object and the table
+		#define a virtual table below the object
+		table_height = object_pose.pose.position.z - self.object_width/2  
+		table_width  = 1.8
+		table_depth  = 0.5
+		table_pose.pose.position.z += -(2*self.object_width)/2 -table_height/2
+		table_height -= 0.008 #remove few milimeters to prevent contact between the object and the table
 
 		self.scene.add_box("table", table_pose, (table_depth, table_width, table_height))
 
@@ -213,7 +213,7 @@ class PickAndPlaceServer(object):
 		goal = createPickupGoal(
 			"arm_torso", "part", object_pose, possible_grasps, self.links_to_allow_contact)
 		
-                rospy.loginfo("Sending goal")
+        rospy.loginfo("Sending goal")
 		self.pickup_ac.send_goal(goal)
 		rospy.loginfo("Waiting for result")
 		self.pickup_ac.wait_for_result()
