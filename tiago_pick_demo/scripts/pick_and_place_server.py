@@ -176,7 +176,22 @@ class PickAndPlaceServer(object):
 
 		rospy.loginfo("'" + object_name + "'' is in scene!")
 
-	def grasp_object(self, object_pose):
+	def grasp_object(self, object_pose, pose_wrt = 'center'):
+		"""Clear the octomap, add boxes for object and table. Then plan and, possibly, execute the grasp.
+
+		Args:
+			object_pose (geometry_msg/PoseStamped): The pose of the object to grasp.
+			pose_wrt (str, optional): The point to which the position contained in the pose is referred. Accepted values are 'top' (i.e. `object_pose.pose.position` is the center of the top face of the object) and 'center' (i.e. `object_pose.pose.position` is the actual center of the object). Defaults to 'center'.
+
+		Raises:
+			ValueError: Raised if the pose of the object is not expressed in the 'base_footprint' reference frame. 
+			NotImplementedError: Raised if the value given to 'pose_wrt' is nor 'top' nor 'center'.
+
+		Returns:
+			string: A string informing about the task outcome.
+		"""
+		if not object_pose.header.frame_id == 'base_footprint':
+			raise ValueError('The pose of the object is assumed to be given in the planning reference frame, namely \'base_footprint\'. the \'frame_id\' of the input pose is instead ' + object_pose.header.frame_id)
 		rospy.loginfo("Removing any previous 'part' object")
 		self.scene.remove_attached_object("arm_tool_link")
 		self.scene.remove_world_object("part")
@@ -188,32 +203,52 @@ class PickAndPlaceServer(object):
 
 		rospy.loginfo("Object pose: %s", object_pose.pose)
 		
-                #Add object description in scene
+        #Add object description in scene
 		self.scene.add_box("part", object_pose, (self.object_depth, self.object_width, self.object_height))
 
 		rospy.loginfo("Second%s", object_pose.pose)
 		table_pose = copy.deepcopy(object_pose)
 
-		#define a virtual table below the object
-		table_height = object_pose.pose.position.z - self.object_width/2  
-		table_width  = 1.8
-		table_depth  = 0.5
-		table_pose.pose.position.z += -(2*self.object_width)/2 -table_height/2
-		table_height -= 0.008 #remove few milimeters to prevent contact between the object and the table
+		#Define a virtual table below the object
+		#Set the pose of the plane and the object boxes to be added to the planning scene
+		if pose_wrt == 'top':
+			#If the pose of the object is meant to be the center of its top face (e.g. in the original ARUCO example)
+			table_width  = 3.0
+			table_depth  = 1.0
+			table_pose.pose.position.x = 0.4 + table_depth / 2
+			table_height = object_pose.pose.position.z - self.object_height
+			table_pose.pose.position.z += -self.object_height - table_height/2
+			table_height -= 0.008 #remove few milimeters to prevent contact between the object and the table
+		elif pose_wrt == 'center':
+			#If the pose of the object is meant to be the actual center of the object
+			table_width  = 3.0
+			table_depth  = 1.0
+			table_pose.pose.position.x = 0.4 + table_depth / 2
+			table_height = object_pose.pose.position.z - self.object_height/2
+			table_pose.pose.position.z += -self.object_height/2 - table_height/2
+			table_height -= 0.008 #remove few milimeters to prevent contact between the object and the table
+		else:
+			raise NotImplementedError('Given `pose_wrt` argument is ' + str(pose_wrt) + ' but only `top` and `center` options are implemented.')
 
+		rospy.loginfo('Table center at: ' + str(table_pose) + ' with table height equal to ' + str(table_height))
+		rospy.loginfo('Object center at: ' + str(table_pose) + ' with table height equal to ' + str(self.object_height))
 		self.scene.add_box("table", table_pose, (table_depth, table_width, table_height))
 
 		# # We need to wait for the object part to appear
 		self.wait_for_planning_scene_object()
 		self.wait_for_planning_scene_object("table")
 
-                # compute grasps
+        # compute grasps
 		possible_grasps = self.sg.create_grasps_from_object_pose(object_pose)
 		self.pickup_ac
-		goal = createPickupGoal(
-			"arm_torso", "part", object_pose, possible_grasps, self.links_to_allow_contact)
+		goal = createPickupGoal("arm_torso", 
+								"part", 
+								object_pose, 
+								possible_grasps, 
+								self.links_to_allow_contact
+								)
 		
-        rospy.loginfo("Sending goal")
+		rospy.loginfo("Sending goal")
 		self.pickup_ac.send_goal(goal)
 		rospy.loginfo("Waiting for result")
 		self.pickup_ac.wait_for_result()
